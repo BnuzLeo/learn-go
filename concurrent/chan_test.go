@@ -2,6 +2,8 @@ package concurrent
 
 import (
 	"fmt"
+	"os"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -155,4 +157,244 @@ func TestOnWay(t *testing.T) {
 	}()
 
 	wg.Wait()
+}
+
+/*
+	Select: 如果同时处理多个通道，可以选用select语句。 它会随机找一个通道进行收发
+*/
+func TestSelectForRandom(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	a, b := make(chan int), make(chan int)
+
+	go func() {
+		defer wg.Done()
+		var (
+			name string
+			x    int
+			ok   bool
+		)
+
+		for {
+			select {
+			case x, ok = <-a:
+				name = "a"
+			case x, ok = <-b:
+				name = "b"
+			}
+			if !ok {
+				return
+			}
+			fmt.Println(name, x)
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		defer close(a)
+		defer close(b)
+
+		for i := 1; i < 5; i++ {
+			select {
+			case a <- i:
+			case a <- i * 10:
+			}
+		}
+	}()
+
+	wg.Wait()
+}
+
+/*
+	Select: 如果想等所有的通道消息处理完，可以把通道设置为nil，这样通道会被阻塞
+*/
+
+func TestSelectBlock(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(3)
+	a, b := make(chan int), make(chan int)
+
+	go func() {
+		defer wg.Done()
+
+		for {
+			select {
+			case x, ok := <-a:
+				if !ok {
+					a = nil
+					break
+				}
+				name := "a"
+				fmt.Println(name, x)
+			case x, ok := <-b:
+				if !ok {
+					b = nil
+					break
+				}
+				name := "b"
+				fmt.Println(name, x)
+			}
+			if a == nil && b == nil {
+				return
+			}
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		defer close(a)
+
+		for i := 1; i < 3; i++ {
+			a <- i
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+
+		defer close(b)
+
+		for i := 1; i < 3; i++ {
+			b <- i * 10
+		}
+	}()
+
+	wg.Wait()
+}
+
+/*
+	Select: 所有通道都不可行的时候，可以通过default来避开select的阻塞
+*/
+
+func TestSelectUnBlock(t *testing.T) {
+	done := make(chan struct{})
+	num := make(chan int)
+
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case x, ok := <-num:
+				if !ok {
+					return
+				}
+				fmt.Println("Date :", x)
+			default:
+
+			}
+			fmt.Println("Date : ", time.Now())
+			time.Sleep(time.Second)
+		}
+	}()
+
+	time.Sleep(time.Second * 5)
+	num <- 100
+	num <- 200
+	close(num)
+
+	<-done
+}
+
+/*
+	模式： 通过工厂方法将goroutine和通道绑定
+*/
+
+func TestMode(t *testing.T) {
+	r := NewReceiver()
+	r.data <- 1
+	r.data <- 2
+	r.data <- 3
+	close(r.data)
+	r.Wait()
+}
+
+/*
+	通道池： 通道本来就是一个并发安全的队列，可以用作Id generator， pool等用途
+*/
+func TestGetPool(t *testing.T) {
+	pool := GetPool(3)
+	isSuccess := pool.put([]byte{'a'})
+	fmt.Println("a", isSuccess)
+	isSuccess = pool.put([]byte{'b'})
+	fmt.Println("b", isSuccess)
+	isSuccess = pool.put([]byte{'c'})
+	fmt.Println("c", isSuccess)
+	isSuccess = pool.put([]byte{'d'})
+	fmt.Println("d", isSuccess) // 因为通道同时最多是3个同时在线
+	fmt.Println(pool.get())
+	fmt.Println(pool.get())
+	fmt.Println(pool.get())
+	fmt.Println(pool.get()) //[0 0 0 0 0 0 0 0 0 0]
+	close(pool)
+}
+
+/*
+	信号量：用通道实现信号量
+*/
+
+func TestSemaphore(t *testing.T) {
+	runtime.GOMAXPROCS(4)
+	var wg sync.WaitGroup
+	sem := make(chan int, 2)
+
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+
+		go func(x int) {
+			defer wg.Done()
+			sem <- x                 // 添加信号
+			time.Sleep(time.Second)  // 做你要做的事情
+			defer func() { <-sem }() // 释放信号
+			fmt.Println(x, time.Now())
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+/*
+	标准库Time的 timeout 和 tick 实现
+*/
+
+func TestTimeChannel(t *testing.T) {
+	// Time out channel
+	go func() {
+		for {
+			select {
+			case <-time.After(time.Second * 5): // 5秒之后，毁天灭地
+				fmt.Println("timeout")
+				os.Exit(0)
+			}
+		}
+	}()
+
+	// Time ticket channel
+	go func() {
+		for {
+			select {
+			case <-time.Tick(time.Second): // 每过1s，执行一次
+				fmt.Println(time.Now())
+			}
+		}
+	}()
+
+	<-(chan struct{})(nil) // 空通道直接阻塞
+}
+
+/*
+	退出处理器：atexit
+*/
+
+func TestAtExit(t *testing.T) {
+	exit := &Exit{}
+	exit.AtExit(func() {
+		fmt.Println("exit 1....")
+	})
+	exit.AtExit(func() {
+		fmt.Println("exit 2....")
+	})
+
+	exit.WaitExit()
+
 }
