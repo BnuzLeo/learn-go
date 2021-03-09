@@ -2,6 +2,7 @@ package method
 
 import (
 	"fmt"
+	"sync"
 	"testing"
 )
 
@@ -101,4 +102,110 @@ func TestClosure(t *testing.T) {
 	// 赋值
 	closure4()
 
+}
+
+/*
+	延迟调用：
+	defer向当前函数注册后执行的函数调用，这种调用被称为延迟调用。
+
+	defer是FILO的
+*/
+
+func TestDefer(t *testing.T) {
+	defer func() { fmt.Println("Defer 1 ...") }()
+	defer func() { fmt.Println("Defer 2 ...") }()
+	fmt.Println("Run")
+}
+
+func deferFunc() (z int) {
+	defer func() {
+		fmt.Println("Defer : ", z)
+		z += 100
+	}()
+
+	z = 100
+	return z
+}
+
+/*
+	延迟调用不是Ret汇编，所以defer是可以改变返回值得
+*/
+func TestDeferNotRet(t *testing.T) {
+	//Defer :  100
+	//TestDeferNotRet :  200
+	// 顺序是 z == 100 -> defer z += 100 -> ret汇编
+	fmt.Println("TestDeferNotRet : ", deferFunc())
+}
+
+/*
+	延迟调用需要注意不要放在循环里面，如果真想放到循环里面，需要封装函数
+*/
+
+func TestDeferLoop(t *testing.T) {
+	do := func() {
+		defer func() { fmt.Println("do finish") }() // 这里的defer是在do函数里面的，每次do结束都会执行
+		fmt.Println("do begin")
+	}
+
+	for i := 0; i < 2; i++ {
+		// 注意：这个defer是在TestDeferLoop函数里面的，他是在TestDeferLoop结束后一次运行多次
+		defer func() { fmt.Println("TestDeferLoop do finish", i) }() //defer func也是一个闭包，所以i两次打印都是2
+		do()
+	}
+
+	//do begin
+	//do finish
+	//do begin
+	//do finish
+	//TestDeferLoop do finish 2
+	//TestDeferLoop do finish 2
+}
+
+/*
+	延迟调用性能：
+	延迟调用需要注册，调用等操作，还有额外的缓存开销
+*/
+
+var m sync.Mutex
+
+func call() {
+	m.Lock()
+	m.Unlock()
+}
+func deferCall() {
+	defer m.Unlock()
+	m.Lock()
+}
+
+func BenchmarkCall(b *testing.B) {
+	//BenchmarkCall-8   	81121734	        14.9 ns/op
+	for i := 0; i < b.N; i++ {
+		call()
+	}
+}
+
+func BenchmarkDeferCall(b *testing.B) {
+	//BenchmarkDeferCall-8   	63802018	        17.0 ns/op
+	for i := 0; i < b.N; i++ {
+		deferCall()
+	}
+}
+
+/*
+	panic 和 recover 的使用：
+	有点像try/catch，但是panic和recover并不是语句，他是方法
+*/
+
+func TestPanicAndRecover(t *testing.T) {
+	defer func() {
+		if err := recover(); err != nil {
+			fmt.Println(err) // defer panic -> recover()只会捕获最后一个panic，有点类似rethrow
+		}
+	}()
+
+	defer func() {
+		panic("defer panic")
+	}()
+
+	panic("TestPanicAndRecover panic")
 }
