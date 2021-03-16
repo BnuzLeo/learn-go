@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"unicode/utf8"
 	"unsafe"
 )
 
@@ -135,4 +136,33 @@ func BenchmarkBuff(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		buff() //BenchmarkBuff-8   	  228507	      5124 ns/op
 	}
+}
+
+/*
+	byte, string, rune的互相转化
+
+	''专门代表Unicode码点，它是int32的别名，相当于UTF-32编码格式
+*/
+
+func TestByteStringRune(t *testing.T) {
+	r := '我'
+
+	s1 := string(r)
+	b1 := byte(r)
+
+	r2 := rune(b1)
+	fmt.Println(s1, b1, r2)
+}
+
+/*
+	unicode 对字符的校验
+*/
+
+func TestUnicode(t *testing.T) {
+	s := "雨痕."
+
+	s1 := string(s[0:1] + s[3:4])
+	fmt.Println(s1, utf8.ValidString(s))
+
+	fmt.Println(len(s), utf8.RuneCountInString(s))
 }
