@@ -85,3 +85,7 @@ func TestAppend(t *testing.T) {
 	fmt.Println(s2, len(s2), cap(s2))
 	fmt.Println(s3, len(s3), cap(s3))
 }
+
+func TestOperation(t *testing.T) {
+
+}
