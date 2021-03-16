@@ -86,6 +86,23 @@ func TestAppend(t *testing.T) {
 	fmt.Println(s3, len(s3), cap(s3))
 }
 
+/*
+	操作slice
+*/
 func TestOperation(t *testing.T) {
-
+	s := []int{1, 2, 3, 4, 5}
+	printSlice(s, "s")
+	// 删除某个元素
+	s = append(s[:2], s[3:]...)
+	printSlice(s, "s")
+	// 顶部弹出
+	tail := s[len(s)-1]
+	s = s[:len(s)-1]
+	printSlice(s, "s")
+	fmt.Println(tail)
+	//底部弹出
+	front := s[0]
+	s = s[1:]
+	printSlice(s, "s")
+	fmt.Println(front)
 }
