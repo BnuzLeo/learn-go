@@ -76,13 +76,10 @@ func TestReflectType(t *testing.T) {
 	fmt.Println(provinceJson) // Province
 	//7. 获取方法
 	var b B
-	ptr := reflect.TypeOf(&b)
-	types := []reflect.Type{ptr, ptr.Elem()}
-	for _, t := range types {
-		for i := 0; i < t.NumMethod(); i++ {
-			method := t.Method(i)
-			fmt.Println(method.Name, method.Type)
-		}
+	ptr := reflect.TypeOf(&b).Elem()
+	for i := 0; i < ptr.NumMethod(); i++ {
+		method := ptr.Method(i)
+		fmt.Println(method.Name, method.Type)
 	}
 }
 
